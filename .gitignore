@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+
+.env
+
+# Chroma Database (Local vector store)
+chroma_db_store/
+./chroma_db_store
+
+# VS Code / IDE settings
+.vscode/
+.idea/
+
+# Mac OS metadata
+.DS_Store

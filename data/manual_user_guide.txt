@@ -1,0 +1,1628 @@
+OFFICIAL MLFF_QD USER GUIDE
+===========================
+
+## FILE RECORD: README.md
+**Exact Location:** `MLFF_QD\README.md`
+**Summary:** The MLFF_QD platform is a unified, modular, and engine-agnostic framework for training state-of-the-art machine learning force fields (MLFFs) for quantum dots (QDs).
+
+**Content:**
+```text
+# MLFF_QD
+## Machine Learning Force Fields for Quantum Dots platform. 🚀
+
+**MLFF_QD** is a unified, modular, and engine‑agnostic framework for training state‑of‑the‑art machine learning force fields (MLFFs) for **quantum dots (QDs)**.  
+It integrates multiple ML engines under a single interface:
+
+✅ **SchNet**
+✅ **PaiNN**
+✅ **NequIP**
+✅ **Allegro**
+✅ **MACE**
+
+## Installation
+For the installation of the MLFF_QD platform and all the required packages, we recommend to create a conda environment using Python 3.12. 
+Details will be provided in the following sections.
+
+### Installation of the mlff_qd package ⚙️
+To install the `mlff_qd` platform, clone the repository and set up the environment as follows:
+
+####  Clone the repository
+```bash
+git clone https://github.com/nlesc-nano/MLFF_QD.git
+cd MLFF_QD
+```
+#### Set up the Conda environment 🛠️
+To set up the conda environment, use the provided `environment.yaml` file. Once activated, install the `mace-torch` package as recommended.
+
+```bash
+conda env create -f environment.yaml
+conda activate mlff
+pip install mace-torch==0.3.13
+```
+####  Install the mlff_qd package
+Finally, install the package in editable mode:
+```bash
+pip install -e .
+```
+------
+## Getting started
+The current version of the platform is developped for being run in a cluster. Thus, in this repository one can find the necessary code, a bash script example for submitting jobs in a slurm queue system and an input file example.
+
+This plaform is currently being subject of several changes. Thus, on the meanwhile, descriptions of the files will be included here so they can be used.
+
+### Preprocessing tools
+An input file example for the preprocessing of the data can be found in `config_files/preprocess_config.yaml`. The initial data for being processed should be placed in a consistent way to the paths indicated in the input file. This preprocessing tool is used for preparaing the xyz files in the useful formats after DFT calculations with CP2K.
+
+By default, the preprocessing code assumes that the input file is `preprocess_config.yaml`. If that is the case, it can be run as:
+```bash
+python -m mlff_qd.preprocessing.generate_mlff_dataset
+```
+
+However, if an user wants to specify a different custom configuration file for the preprocessing, the code can be run as:
+```bash
+python -m mlff_qd.preprocessing.generate_mlff_dataset --config my_experiment.yaml
+```
+
+## Training Guide
+To run the training code, on can use the following command, which by default looks for a config file named `input.yaml`:
+```bash
+python -m mlff_qd.training
+```
+In `config_files/` one can find an example of the file. Here, for any of the engines available in the platform, one can find the common parameters used for setting up the model and the training.
+
+To specify a different config file, one should run the following command:
+```bash
+python -m mlff_qd.training --config nequip.yaml
+```
+
+---
+
+This loads the unified.yaml config and optionally overrides the engine at runtime.
+You can run any engine by changing `--engine` to one of:
+```bash
+schnet, painn, nequip, allegro, mace, fusion
+```
+We are showing examples with nequip, you can choose anyone. **The training process will automatically convert the data format according to the platform (engine) selected.**
+
+#### 🟩 Commands Using Unified YAML (`unifiedYaml.yaml`)
+
+> `unifiedYaml.yaml` should contain `platform: nequip` and optionally `input_xyz_file`.
+
+| Use Case | Command | Notes |
+|----------|---------|-------|
+| Engine and input both defined in YAML | `sbatch run_training.sh unifiedYaml.yaml` | `unifiedYaml.yaml` contains `platform: nequip` and `input_xyz_file` |
+| Engine overridden via CLI, input from YAML | `sbatch run_training.sh unifiedYaml.yaml --engine nequip` | Use if YAML has `input_xyz_file` but platform may vary |
+| Engine and input both overridden via CLI | `sbatch run_training.sh unifiedYaml.yaml --engine nequip --input ./basic.xyz` | Most flexible: ignores YAML settings |
+| Engine overridden, input missing | `sbatch run_training.sh unifiedYaml.yaml --engine nequip` | ❌ Will fail if `input_xyz_file` is missing from YAML |
+| Input passed via `--input`, YAML has no dataset | `sbatch run_training.sh unifiedYaml.yaml --engine nequip --input ./basic.xyz` | ✅ Safe way to inject input without editing YAML |
+
+---
+
+#### 🟦 Commands Using Engine-Specific YAML (e.g., `nequip.yaml`)
+
+> These YAMLs should include both `platform: nequip` and `input_xyz_file`.
+
+| Use Case | Command | Notes |
+|----------|---------|-------|
+| Use engine-specific YAML with `--engine` | `sbatch run_training.sh nequip.yaml --engine nequip` | YAML must contain `input_xyz_file` |
+| Override input in engine-specific YAML | `sbatch run_training.sh nequip.yaml --engine nequip --input ./basic.xyz` | Use to test with alternate datasets |
+
+## Additional Flags: `--only-generate` and `--train-after-generate`
+
+Control **data/config generation** and **training** phases using these flags:
+- `--only-generate`:  
+  Only generate the engine-specific YAML and/or convert data, **without starting training**.
+- `--train-after-generate`:  
+  Generate data/config, then **immediately start training** using the generated engine YAML.
+
+### Priority Rules:
+If you provide **both** flags, `--only-generate` takes precedence and training will **not** start.
+
+```bash
+# Only generate engine YAML and converted data (no training)
+sbatch run_training.sh unifiedYaml.yaml --engine nequip --only-generate
+
+# Generate and then train (run both steps)
+sbatch run_training.sh unifiedYaml.yaml --engine nequip --train-after-generate
+```
+
+---
+
+## 📝 Note on Engine YAMLs
+
+If you are **already using an engine-specific YAML** (e.g., `nequip.yaml`, `schnet.yaml`):
+
+- You **do not need** to use `--only-generate` or `--train-after-generate`.
+- Just run:
+```bash
+sbatch run_training.sh nequip.yaml --engine nequip
+```
+
+---
+
+### Inference code
+After the training has finished, an user can run the inference code that generates the MLFF:
+```bash
+python -m mlff_qd.training.inference
+```
+By default, it will look for a input file called input.yaml. Thus, if an user wants to specify another input file, one can do the following:
+```bash
+python -m mlff_qd.training.inference --config input_file.yaml
+```
+
+After inference, if an user wants to use fine-tuning, that option is also available in the following way:
+```bash
+python -m mlff_qd.training.fine_tuning
+```
+If an input file different from the default one was used, the procedure is the following:
+```bash
+python -m mlff_qd.training.fine_tuning --config input_file.yaml
+```
+
+### Postprocessing
+More details will be added in future versions, but the postprocessing code is run as:
+```bash
+python -m mlff_qd.postprocessing
+```
+If an user wants to use an input file different from the default config.yaml, the procedure is the following:
+```bash
+python -m mlff_qd.training.fine_tuning --config input_file.yaml
+```
+The postprocessing part of the code, requieres also to install the following packages: plotly, kneed.
+
+## CLI Mode - Extract Training Metrics from TensorBoard Event Files
+This script, `analysis/extract_metrics.py`,  extracts scalar training metrics from TensorBoard event files and saves them to a CSV file.
+
+- **`-p/--path`**:  Path to the TensorBoard event file. **(Required)**.
+- **`-o/--output_file`**: Provides the path to the CSV file containing the training metrics.
+*   Prerequisites **Required Python Packages**:
+    *   `tensorboard`
+    You can install these using pip:
+    ```bash
+    pip install tensorboard
+    ```
+### Command-Line Usage:
+To run the script use the following command:
+
+```bash
+python analysis/extract_metrics.py -p <event_file_path> [-o <output_file_name>]
+```
+
+## CLI Mode - Plotting Training Metrics for SchNet and Nequip
+
+The `analysis/plot.py` script allows you to visualize training progress for your models. It accepts several command-line options to control its behavior. Here’s what each option means:
+
+- **`--platform`**: Specifies the model platform. Use either `schnet` or `nequip`.
+- **`--file`**: Provides the path to the CSV file containing the training metrics.
+- **`--cols`**: Sets the number of columns for the subplot grid (default is 2).
+- **`--out`**: Defines the output file name for the saved plot. The name should end with `.png`.
+
+
+### Plotting SchNet Results
+
+To plot the results for SchNet, use the following command:
+```bash
+python analysis/plot.py --platform schnet --file "path/to/schnet_metrics.csv" --cols 2 --out schnet_plot.png
+```
+Replace "path/to/schnet_metrics.csv" with the actual path to your SchNet metrics CSV file. 
+
+### Plotting Nequip Results
+
+To plot the results for Nequip, use the following command:
+```bash
+python analysis/plot.py --platform nequip --file "path/to/nequip_metrics.csv" --cols 2 --out nequip_plot.png
+```
+Replace "path/to/nequip_metrics.csv" with the actual path to your Nequip metrics CSV file.
+
+These commands will generate plots for the respective platforms and save them as PNG files in the current working directory.
+
+## GUI Mode: Interactive Metrics Extraction and Plotting with Streamlit
+
+The `analysis/app.py` script offers a Streamlit GUI to extract metrics from TensorBoard event files and visualize SchNet/NequIP training progress with static (Matplotlib, saveable) or interactive (Plotly, display-only) plots. 
+
+####  Prerequisites:  -  `streamlit`, `plotly`
+  ```bash
+  pip install streamlit plotly
+  ```
+  
+### Launching the GUI:
+  ```bash
+  streamlit run analysis/app.py
+  ```
+
+```
+
+
+---------------------------------
+
+MLFF_QD COMMAND CHEAT SHEET
+=================================
+
+This file contains a clean, deduplicated, and structured list of MLFF_QD commands with explanations.
+(--job-name removed as requested.)
+
+----------------------------------------
+1. PREPROCESS RAW DATA INTO MLFF DATASETS
+----------------------------------------
+
+Local (Python)
+--------------
+python -m mlff_qd.preprocessing.generate_mlff_dataset
+python -m mlff_qd.preprocessing.generate_mlff_dataset --config my_preprocess_config.yaml
+
+Purpose:
+Convert raw CP2K/DFT outputs into standardized MLFF_QD dataset format (.xyz / .npz).
+This is for data generation or preparaing the data for MLFF_QD
+Schnet and Painn need npz and Nequip, Allegro and MACE need xyz. 
+
+
+----------------------------------------
+2. TRAIN USING A UNIFIED YAML (input.yaml)
+----------------------------------------
+
+Local (Python)
+--------------
+python -m mlff_qd.training --config input.yaml --engine schnet --train-after-generate
+python -m mlff_qd.training --config input.yaml --engine painn --train-after-generate
+python -m mlff_qd.training --config input.yaml --engine nequip --train-after-generate
+python -m mlff_qd.training --config input.yaml --engine allegro --train-after-generate
+python -m mlff_qd.training --config input.yaml --engine mace --train-after-generate
+
+Slurm (sbatch)
+--------------
+sbatch run_training.sh input.yaml --engine schnet --train-after-generate
+sbatch run_training.sh input.yaml --engine painn --train-after-generate
+sbatch run_training.sh input.yaml --engine nequip --train-after-generate
+sbatch run_training.sh input.yaml --engine allegro --train-after-generate
+sbatch run_training.sh input.yaml --engine mace --train-after-generate
+
+Purpose:
+Train a chosen engine while letting MLFF_QD generate engine‑specific YAML and data.
+
+
+----------------------------------------
+3. TRAIN WITH CUSTOM DATA INPUT
+----------------------------------------
+
+Local (Python)
+--------------
+python -m mlff_qd.training --config input.yaml --engine schnet --input consolidated_dataset_1000_CdSe.xyz --train-after-generate
+
+Slurm (sbatch)
+--------------
+sbatch run_training.sh input.yaml --engine nequip --input ./basic_consolidated_dataset_1000CdSe.xyz --train-after-generate
+
+Purpose:
+Swap datasets easily without editing YAML.
+
+
+
+
+----------------------------------------
+6. BENCHMARK MODE
+----------------------------------------
+
+Local (Python)
+--------------
+python -m mlff_qd.training --config input.yaml --benchmark
+
+Slurm (sbatch)
+--------------
+sbatch run_training.sh input.yaml --benchmark
+
+
+Purpose:
+Runs MLFF_QD’s benchmark harness, producing benchmark_results/ and summary CSVs.
+
+
+----------------------------------------
+7. POST-PROCESS BENCHMARK RESULTS
+----------------------------------------
+
+Local (Python)
+--------------
+python -m mlff_qd.training --config input.yaml --post-process
+
+Slurm
+-----
+sbatch benchmark.sh input.yaml --post-process
+
+Purpose:
+Aggregates benchmark outputs into clean summaries without retraining.
+
+
+----------------------------------------
+8. MULTI-ENGINE RUN HELPERS
+----------------------------------------
+
+Slurm (sbatch)
+----------------------
+sbatch run_schnetx.sh input.yaml --engine schnet --train-after-generate
+sbatch run_schnetx.sh input.yaml --engine painn --train-after-generate
+sbatch run_schnetx.sh input.yaml --engine nequip --train-after-generate
+sbatch run_schnetx.sh input.yaml --engine allegro --train-after-generate
+sbatch run_schnetx.sh input.yaml --engine mace --train-after-generate
+sbatch run_mace.sh input.yaml --engine mace --train-after-generate
+sbatch run_training.sh input11.yaml --engine schnet --train-after-generate
+
+
+
+
+
+---------------------------------
+
+## FILE RECORD: preprocess_config.yaml
+**Exact Location:** `MLFF_QD\config_files\preprocessing\preprocess_config.yaml`
+**Summary:** This file, preprocess_config.yaml, is a configuration file for data preprocessing in the MLFF-QD framework, specifying dataset input options and optional SOAP descriptor settings.
+
+**Content:**
+```text
+# ───────────────────────────────────────────────
+#                 Dataset Input
+#  Choose ONE of the two options below for your data.
+# ───────────────────────────────────────────────
+dataset:
+  # --- Option A: Use a single, pre-combined file (Recommended) ---
+  # Uncomment 'input_file' if you have one file with positions, forces, and energy.
+  # input_file: "dataset_pos_frc_ev.xyz"
+
+  # --- Option B: Auto combine separate position and force files ---
+  # Use these lines if your positions and forces are in two different files.
+   pos_file: "HgTe-pos-1.xyz"
+   frc_file: "HgTe-frc-1.xyz"
+  
+   output_prefix: "consolidated_dataset" 
+   
+   sizes: [200,500]
+  # Subset counts (number of structures from each method)
+   subset_counts:
+     MD: 4036  # Structures obtained from Molecular Dynamics (MD) simulation 
+   contamination: 0.05 # Fraction of outliers removed by Isolation Forest 
+   
+# ───────────────────────────────────────────────
+# Optional SOAP descriptor settings
+# (You can safely remove this section to let MLFF-QD
+#  auto-detect species and use default SOAP parameters)
+# ───────────────────────────────────────────────
+SOAP: 
+   species: ["Hg", "Cl", "Te"] 
+   r_cut: 12.0 
+   n_max: 7 
+   l_max: 3 
+   sigma: 0.1 
+   periodic: False
+   sparse: False
+```
+---------------------------------
+
+## FILE RECORD: allegro.yaml
+**Exact Location:** `MLFF_QD\config_files\training\allegro.yaml`
+**Summary:** This file, allegro.yaml, is a configuration file for training an Allegro model using the NequIP framework, specifying model architecture, hyperparameters, and training settings.
+
+**Content:**
+```text
+run: [train, val, test]
+
+
+cutoff_radius: 12.0
+chemical_symbols: [Cd, Cl, Se] 
+model_type_names: ${chemical_symbols}
+
+data:
+  _target_: nequip.data.datamodule.ASEDataModule
+  seed: 456             
+  split_dataset:
+    file_path:  #./consolidated_dataset_1000_CdSe_new.xyz
+    train: 0.8
+    val: 0.1
+    test: 0.1
+  transforms:
+    - _target_: nequip.data.transforms.NeighborListTransform
+      r_max: ${cutoff_radius}
+    - _target_: nequip.data.transforms.ChemicalSpeciesToAtomTypeMapper
+      chemical_symbols: ${chemical_symbols}
+  
+  train_dataloader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 16
+  val_dataloader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 16
+  test_dataloader: ${data.val_dataloader}
+  stats_manager:
+    _target_: nequip.data.CommonDataStatisticsManager
+    type_names: ${model_type_names}
+
+trainer:
+  _target_: lightning.Trainer
+  accelerator: auto
+  devices: 1
+  max_epochs: 3
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 5
+  
+  callbacks:
+      
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: ./results 
+      filename: best
+      save_last: true
+    
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val0_epoch/weighted_sum        # validation metric to monitor
+      min_delta: 1e-3                         # how much to be considered a "change"
+      patience: 20                            # how many instances of "no change" before stopping
+      
+  logger:
+    - _target_: lightning.pytorch.loggers.TensorBoardLogger
+      save_dir: ./logs
+      name: tutorial_log
+      version: null
+      default_hp_metric: false
+
+
+# NOTE:
+# interpolation parameters for Allegro model
+num_scalar_features: 64
+
+
+training_module:
+  _target_: nequip.train.EMALightningModule
+  loss:
+    _target_: nequip.train.EnergyForceLoss
+    per_atom_energy: true
+    coeffs:
+      total_energy: 0.05
+      forces: 0.95
+  val_metrics:
+    _target_: nequip.train.EnergyForceMetrics
+    coeffs:
+      per_atom_energy_mae: 0.05
+      forces_mae: 0.95
+  test_metrics: ${training_module.val_metrics}
+  optimizer:
+    _target_: torch.optim.Adam
+    lr: 0.001
+  # ^ IMPORTANT: Allegro models do better with learning rates around 1e-3
+
+  # to use the Allegro model in the NequIP framework, the following `model` block has to be changed to be that of Allegro's
+  model:
+    _target_: allegro.model.AllegroModel
+
+    # === basic model params ===
+    seed: 456
+    model_dtype: float32
+    type_names: ${model_type_names}
+    r_max: ${cutoff_radius}
+
+    # === two-body scalar embedding ===
+    radial_chemical_embed:
+      # the defaults for the Bessel embedding module are usually appropriate
+      _target_: allegro.nn.TwoBodyBesselScalarEmbed
+      num_bessels: 8
+      bessel_trainable: false
+      polynomial_cutoff_p: 6
+
+    # output dimension of the radial-chemical embedding
+    radial_chemical_embed_dim: ${num_scalar_features}
+
+    # scalar embedding MLP
+    scalar_embed_mlp_hidden_layers_depth: 1
+    scalar_embed_mlp_hidden_layers_width: ${num_scalar_features}
+    scalar_embed_mlp_nonlinearity: silu
+
+    # === core hyperparameters ===
+    # The following hyperparameters are the main ones that one should focus on tuning.
+
+    # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
+    l_max: 1
+
+    # number of tensor product layers, 1-3 usually best, more is more accurate but slower
+    num_layers: 2
+
+    # number of scalar features, more is more accurate but slower
+    # 16, 32, 64, 128, 256 are good options to try depending on the dataset
+    num_scalar_features: ${num_scalar_features}
+
+    # number of tensor features, more is more accurate but slower
+    # 8, 16, 32, 64 are good options to try depending on the dataset
+    num_tensor_features: 32
+
+    # == allegro MLPs ==
+    # neural network parameters in the Allegro layers
+    allegro_mlp_hidden_layers_depth: 1
+    allegro_mlp_hidden_layers_width: ${num_scalar_features}
+    allegro_mlp_nonlinearity: silu
+    # ^ setting `nonlinearity` to `null` means that the Allegro MLPs are effectively linear layers
+
+    # === advanced hyperparameters ===
+    # The following hyperparameters should remain in their default states until the above core hyperparameters have been set.
+
+    # whether to include features with odd mirror parity
+    # often turning parity off gives equally good results but faster networks, so do consider this
+    parity: true
+
+    # whether the tensor product weights couple the paths and channels or not (otherwise the weights are only applied per-path)
+    # default is `true`, which is expected to be more expressive than `false`
+    tp_path_channel_coupling: true
+
+    # == readout MLP ==
+    # neural network parameters in the readout layer
+    readout_mlp_hidden_layers_depth: 1
+    readout_mlp_hidden_layers_width: ${num_scalar_features}
+    readout_mlp_nonlinearity: silu
+    # ^ setting `nonlinearity` to `null` means that output MLP is effectively a linear layer
+
+    # === misc hyperparameters ===
+    # average number of neighbors for edge sum normalization
+    avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
+
+    # per-type per-atom scales and shifts
+    per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}
+    # ^ this should typically be the isolated atom energies for your dataset
+    #   provided as a dict, e.g.
+    # per_type_energy_shifts: 
+    #   C: 1.234
+    #   H: 2.345
+    #   O: 3.456
+    per_type_energy_scales: ${training_data_stats:forces_rms}
+    per_type_energy_scales_trainable: false
+    per_type_energy_shifts_trainable: false
+
+    # ZBL pair potential (optional, can be removed or included depending on aplication)
+    # see NequIP docs for details:
+    # https://nequip.readthedocs.io/en/latest/api/nn.html#nequip.nn.pair_potential.ZBL
+    pair_potential:
+      _target_: nequip.nn.pair_potential.ZBL
+      units: real     # Ang and kcal/mol, LAMMPS unit names;  allowed values "metal" and "real"
+      chemical_species: ${chemical_symbols}   # must tell ZBL the chemical species of the various model atom types
+
+
+global_options:
+  allow_tf32: false
+```
+---------------------------------
+
+## FILE RECORD: fusion.yaml
+**Exact Location:** `MLFF_QD\config_files\training\fusion.yaml`
+**Summary:** This file, named fusion.yaml, contains configuration settings for training a machine learning model using the NequIP library, specifically for a fusion model architecture.
+
+**Content:**
+```text
+# General settings
+general:
+    seed: 42  # Random seed for reproducibility
+    database_name: 'CdSe.db'  # Name of the database file
+
+# Data handling settings
+data:
+    dataset_path: 
+    use_last_n: 100  # current testing
+# Model architecture settings
+model:
+    model_type: nequip_mace_interaction_fusion   # Options: nequip_mace_so3tensor_fusion
+    cutoff: 12.
+    n_rbf: 40
+    n_atom_basis: 192
+    n_interactions: 2
+    
+    dropout_rate: null # Default is 0.1 but it will not work when you select only 1 layer
+    n_layers: 1  # Default is 1
+    n_neurons: null # [256, 128, 64, 32] (if null then n_neurons == n_atom_basis)
+    distance_unit: 'Ang'
+    property_unit_dict:
+      energy: 'eV'
+      forces: 'eV/Ang'
+
+# Output settings
+outputs:
+    energy:
+      loss_weight: 0.05
+      metrics: "MAE"
+    forces:
+      loss_weight: 0.95
+      metrics: "MAE"
+
+# Training settings
+training:
+    accelerator: 'gpu'
+    devices: 1
+    precision: 32
+    batch_size: 16
+    num_train: 800
+    num_val: 200
+    max_epochs: 3
+    num_workers: 24
+    pin_memory: true
+    optimizer:
+      type: 'AdamW'
+      lr: 0.0001 #changed 0.0001 to 0.001
+    scheduler:
+      type: 'ReduceLROnPlateau'
+      factor: 0.8
+      patience: 30
+      verbose: true
+
+# Logging and checkpoint settings
+logging:
+    folder: './results'
+    log_dir: "lightning_logs"
+    checkpoint_dir: "best_inference_model"
+    monitor: "val_loss"
+
+# Testing settings
+testing:
+    trained_model_path: './results'  # Path to load the trained model
+    csv_file_name: 'actual_vs_predicted_enrgforc.csv'  # Path to save the predictions CSV
+
+# Resume training settings
+resume_training:
+    resume_checkpoint_dir: null # Path to model checkpoint file if required 
+
+# Fine Tuning settings
+fine_tuning:
+    pretrained_checkpoint: # checkpoint file path
+    freeze_embedding: true
+    freeze_interactions_up_to: 2 # add no of layers
+    freeze_all_representation: true
+    lr: 0.00005
+    early_stopping_patience: 10
+    best_model_dir: fine_tuned_best_model  # Subdirectory only
+    checkpoint_dir: fine_tuned_checkpoints  # Subdirectory only
+    log_name: fine_tune_logs  # Subdirectory for TensorBoard logs
+```
+---------------------------------
+
+## FILE RECORD: input.yaml
+**Exact Location:** `MLFF_QD\config_files\training\input.yaml`
+**Summary:** This file is a configuration file for training machine learning models using the MLFF_QD engine, specifying model architecture, training parameters, and output settings.
+
+**Content:**
+```text
+# ==============================================================================
+# Notes for users:
+#
+# - Use **dot notation** for override keys (see below for example).
+# - In case of conflict, keys from `common` always take priority over `overrides`.
+# - Keys not present in the engine template will be ignored (with a warning).
+# - n_rbf: For schnet, painn, fusion → RBF basis functions. For nequip/allegro → mapped to bessel basis.
+# ==============================================================================
+
+platform: fusion  # [schnet, painn, fusion, nequip, allegro, mace]
+
+common:
+  data:
+    input_xyz_file: ./basic_consolidated_dataset_1000CdSe.xyz   # Path to your XYZ file
+
+  model:
+    mp_layers: 3       # Number of message-passing layers in the neural network.
+    features: 32       # Dimension of atomic feature vectors (per-atom embedding size).
+    cutoff: 12.0
+    n_rbf: 8           # For schnet, painn, fusion: number of RBF (radial basis functions)
+                       # For nequip, allegro: this value will be mapped to number of bessel basis functions
+    l_max: 1
+    parity: true
+    model_dtype: float32
+    chemical_symbols: [Cd, Se, Cl]
+    # pair_potential: Option to enable ZBL for NequIP/Allegro models only.
+    #   - Set to "ZBL" (as a string) to ENABLE ZBL pair potential
+    #   - Set to null to DISABLE the pair potential block (recommended for most cases)
+    #   - Any other value will raise an error
+    pair_potential: null   # Use "ZBL" (string), or null to disable
+
+  training:
+    seed: 42
+    train_size: 0.8
+    val_size: 0.1
+    test_size: 0.1
+    batch_size: 16      # Global batch size for training. 
+                        # If using multiple GPUs, this value is split evenly across devices 
+                        # (e.g., 16 total → 8 per GPU when devices=2). 
+                        # For a single GPU, the full batch size is used.
+    epochs: 3
+    learning_rate: 0.001
+    num_workers: 24
+    accelerator: cuda
+    devices: 2              # Number of GPUs to use for distributed or data-parallel training. Set 1 for single-GPU.
+    log_every_n_steps: 5    # Frequency (in steps) for logging metrics and losses to the console or logger.
+    optimizer: AdamW
+    scheduler:
+      type: ReduceLROnPlateau
+      factor: 0.8
+      patience: 5
+    pin_memory: true      # If true, preloads data into page-locked memory for faster GPU transfer.
+    
+    early_stopping:
+      enabled: true       # Enable or disable early stopping to avoid overfitting.
+      patience: 30        # Stop training if validation loss doesn’t improve for this many epochs.
+      min_delta: 0.003    # Minimum change in monitored metric to qualify as improvement.
+      monitor: val_loss
+      # monitor: val_loss         # for schnet
+      # monitor: val0_epoch/weighted_sum   # for nequip
+      # (If omitted, the code auto-inserts the correct default!)
+
+  loss:
+    energy_weight: 0.05
+    forces_weight: 0.95
+
+  output:
+    output_dir: ./resultsNewNewX
+
+# ------------------------------------------------------------------------------
+# Overrides section:
+# - Use dot notation for all keys (e.g., model.n_rbf, trainer.callbacks[0].patience)
+# - Only specify keys you want to override for a specific engine.
+# - If a key is in both `common` and `overrides`, `common` wins.
+# ------------------------------------------------------------------------------
+
+overrides:
+
+  schnet:
+    model.n_rbf: 30
+    model.activation: relu
+    model.n_layers: 1
+    model.dropout: 0.2
+    logging.folder: ./resultsExpert
+    trainer:
+      callbacks:
+        - _target_: lightning.pytorch.callbacks.EarlyStopping
+          patience: 100
+
+  nequip:
+    model.num_bessels: 50                     # dot notation for nested keys
+    training_module.model.parity: false        # disables parity in the model
+    model.n_layers: 5                         # ignored if mp_layers is set in common
+    training_module.model.num_layers: 5        # ignored if mp_layers is set in common
+    model.activation: relu                     # ignored if not in template
+    model.dropout: 0.1                         # ignored if not in template
+    logging.folder: ./resultsNequIP
+    trainer.logger[0].save_dir: logsNequIPX
+    trainer.callbacks[1].filename: bestNew
+    trainer.callbacks[0].patience: 100
+
+    # Example: Add new parameter not present in template to see warning in logs
+    model.new_param: 12345
+    training_module.loss.coeffs.total_energy: 0.02
+
+  painn:
+    model.n_atom_basis: 50
+    training.num_val: 0.3
+    outputs.forces.loss_weight: 0.91
+    logging.folder: ./resultsPainn
+    trainer.callbacks[1].monitor: val_loss
+    trainer.logger[0].save_dir: ./logsPainnX
+    fine_tuning.lr: 0.05
+
+  fusion:
+    model.n_interactions: 4
+    training.num_train: 0.65
+    outputs.energy.loss_weight: 0.09
+    logging.folder: ./resultsFusion
+    trainer.callbacks[0].min_delta: 0.01
+    trainer.logger[0].save_dir: ./logsFusionX
+
+  allegro:
+    training_module.model.radial_chemical_embed.num_bessels: 17
+    model.n_bessels: 50
+    model.n_rbf: 30
+    training_module.model.num_scalar_features: 48
+    training_module.model.l_max: 2
+    training_module.model.parity: false
+    trainer.callbacks[0].patience: 10
+    trainer.callbacks[2].logging_interval: epoch
+    trainer.logger[0].save_dir: ./logsAllegroX
+
+  mace:
+    num_channels: 64
+    model.n_rbf: 30
+    max_L: 1
+    lr: 0.007
+    eval_interval: 10
+    valid_file: ./converted_data/mace_val.xyz
+
+
+```
+---------------------------------
+
+## FILE RECORD: mace.yaml
+**Exact Location:** `MLFF_QD\config_files\training\mace.yaml`
+**Summary:** This file, mace.yaml, is a configuration file for training a MACE (Molecular Atomic Charge Embedding) model using a machine learning framework.
+
+**Content:**
+```text
+# ===========================
+# Experiment & Paths
+# ===========================
+name: mace_cdsecl_model
+seed: 42
+log_level: INFO
+error_table: PerAtomMAE   # Report validation metrics using MAE
+
+# ===========================
+# Hardware & Precision
+# ===========================
+device: cuda              # Options: cpu, cuda, mps, xpu
+default_dtype: float32
+
+# ===========================
+# Dataset & Keys
+# ===========================
+train_file:   #consolidate-cdse35_1000.xyz consolidated_dataset_1000_CdSe_new.xyz
+valid_file: null
+test_file: null
+
+energy_key: energy  #REF_energy
+forces_key: forces  #REF_forces
+stress_key: null
+
+valid_fraction: 0.2
+batch_size: 8
+num_workers: 24
+pin_memory: true        # Enables faster CPU → GPU transfer
+
+# ===========================
+# Model Configuration
+# ===========================
+model: MACE
+r_max: 12                  #cutoff
+num_radial_basis: 20           #n-rbf
+num_cutoff_basis: 6
+max_ell: 3
+num_channels: 64             #n_atom_basis
+max_L: 2
+num_interactions: 3
+correlation: 3
+avg_num_neighbors: 100.80
+
+# ===========================
+# Training Parameters
+# ===========================
+max_num_epochs: 3
+ema: true
+ema_decay: 0.99
+
+# ===========================
+# Validation & Early Stopping
+# ===========================
+valid_batch_size: 16         # Match GPU capacity
+eval_interval: 1           # Check validation every 1 epochs
+patience: 30                # Early stop if no val improvement in 30 checks
+
+# ===========================
+# Stochastic Weight Averaging
+# ===========================
+swa: true
+start_swa: 400
+swa_energy_weight: 1.0
+swa_forces_weight: 100.0
+
+# ===========================
+# Loss Weights
+# ===========================
+forces_weight: 0.95
+energy_weight: 0.05
+
+# ===========================
+# Optimizer & Scheduler
+# ===========================
+optimizer: adam
+lr: 0.001
+weight_decay: 1e-5
+
+scheduler: ReduceLROnPlateau
+lr_factor: 0.8
+scheduler_patience: 5
+lr_scheduler_gamma: 0.9993
+
+# ===========================
+# Energy Baseline & Scaling
+# ===========================
+E0s: "average"                         # Use average per-atom energy (like --E0s=average)
+scaling: rms_forces_scaling
+compute_avg_num_neighbors: true
+
+```
+---------------------------------
+
+## FILE RECORD: nequip.yaml
+**Exact Location:** `MLFF_QD\config_files\training\nequip.yaml`
+**Summary:** This file, nequip.yaml, is a configuration file for training a machine learning model using the NequIP framework, specifying data loading, model architecture, training parameters, and evaluation metrics.
+
+**Content:**
+```text
+# The config file is divided into 4 sections -- `data`, `train`, `model`, and `global_options`
+# The config system relies on omegaconf (https://omegaconf.readthedocs.io/en/2.3_branch/index.html)
+# and hydra (https://hydra.cc/docs/intro/) functionalities, such as
+# - omegaconf's variable interpolation (https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#variable-interpolation)
+# - omegaconf's resolvers (https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#resolvers)
+# - hydra's instantiate (https://hydra.cc/docs/advanced/instantiate_objects/overview/)
+# With hydra's instantiation (notice the `_target_`s everywhere), the config file (almost) directly corresponds to instantiating objects as one would normally do in Python.
+# Much of the infrastructure is based on PyTorch Lightning (https://lightning.ai/docs/pytorch/stable/), such as the use of Lightning's Trainer, DataModule, LightningModule, Callback objects.
+
+# ===========
+#     RUN
+# ===========
+# the run types will be completed in sequence
+# one can do `train`, `val`, `test` run types
+run: [train, val, test]
+
+
+# the following parameters (cutoff_radius, chemical_symbols, model_type_names) are not used direcly by the code
+# parameters that take thier values show up multiple times in the config, so this allows us to use
+# variable interpolation to keep their multiple instances consistent
+
+# data and model r_max can be different (model's r_max should be smaller), but we try to make them the same
+cutoff_radius: 12.0
+
+# There are two sets of atomic types to keep track of in most applications
+# -- there is the conventional atomic species (e.g. C, H), and a separate `type_names` known to the model.
+# The model only knows types based on a set of zero-based indices and user-given `type_names` argument.
+# An example where this distinction is necessary include datasets with the same atomic species with different charge states:
+# we could define `chemical_symbols: [C, C]` and model `type_names: [C3, C4]` for +3 and +4 charge states.
+# There could also be instances such as coarse graining we only care about the model's `type_names` (no need to define chemical species).
+# Because of this distinction, these variables show up as arguments across different categories, including, data, model, metrics and even callbacks.
+# In this case, we fix both to be the same, so we define a single set of each here and use variable interpolation to retrieve them below.
+# This ensures a single location where the values are set to reduce the chances of mis-configuring runs.
+chemical_symbols: [Cd, Cl, Se] 
+model_type_names: ${chemical_symbols}
+
+
+# ============
+#     DATA
+# ============
+# `data` is managed by `LightningDataModule`s
+# NequIP provides some standard datamodules that can be found in `nequip.data.datamodule`
+# Users are free to define and use their own datamodules that subclass nequip.data.datamodule.NequIPDataModule
+data:
+  _target_: nequip.data.datamodule.ASEDataModule
+  seed: 456             # dataset seed for reproducibility
+  
+  # here we take an ASE-readable file (in extxyz format) and split it into train:val:test = 80:10:10
+  split_dataset: 
+    file_path:  #./basic_consolidated_dataset_1000CdSe.xyz
+    train: 0.8
+    val: 0.1
+    test: 0.1
+
+  # `transforms` convert data from the Dataset to a form that can be used by the ML model
+  # the transforms are only performed right before data is given to the model
+  # data is kept in its untransformed form
+  
+  transforms:
+    # data doesn't usually come with a neighborlist -- this tranforms prepares the neighborlist
+    - _target_: nequip.data.transforms.NeighborListTransform
+      r_max: ${cutoff_radius}
+    # the models only know atom types, which can be different from the chemical species (e.g. C, H)
+    # for instance we can have data with different charge states of carbon, which means they are
+    # all labeled by chemical species `C`, but may have different atom type labels based on the charge states
+    # in this case, the atom types are the same as the chemical species, but we still have to include this
+    # transformation to ensure that the data has 0-indexed atom type lists used in the various model operations 
+    - _target_: nequip.data.transforms.ChemicalSpeciesToAtomTypeMapper
+      chemical_symbols: ${chemical_symbols}
+
+  # the following are torch.utils.data.DataLoader configs excluding the arguments `dataset` and `collate_fn`
+  # https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader
+  train_dataloader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 16
+    num_workers: 5
+    shuffle: true
+  val_dataloader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 16
+    num_workers: ${data.train_dataloader.num_workers}  # we want to use the same num_workers -- variable interpolation helps
+  test_dataloader: ${data.val_dataloader}  # variable interpolation comes in handy again
+
+  # dataset statistics can be calculated to be used for model initialization such as for shifting, scaling and standardizing.
+  # it is advised to provide custom names -- you will have to retrieve them later under model to initialize certain parameters to the dataset statistics computed
+  stats_manager:
+    # dataset statistics is handled by the `DataStatisticsManager`
+    # here, we use `CommonDataStatisticsManager` for a basic set of dataset statistics for general use cases
+    # the dataset statistics include `num_neighbors_mean`, `per_atom_energy_mean`, `forces_rms`, `per_type_forces_rms`
+    _target_: nequip.data.CommonDataStatisticsManager
+    # dataloader kwargs for data statistics computation
+    # `batch_size` should ideally be as large as possible without trigerring OOM
+    dataloader_kwargs:
+      batch_size: 16
+    # we need to provide the same type names that correspond to the model's `type_names`
+    # so we interpolate the "central source of truth" model type names from above
+    type_names: ${model_type_names}
+
+# `trainer` (mandatory) is a Lightning.Trainer object (https://lightning.ai/docs/pytorch/stable/common/trainer.html#trainer-class-api)
+trainer:
+  _target_: lightning.Trainer
+  accelerator: auto
+  devices: 1
+  enable_checkpointing: true
+  max_epochs: 3
+  max_time: 03:00:00:00
+  check_val_every_n_epoch: 1  # how often to validate
+  log_every_n_steps: 1       # how often to log
+
+  # use any Lightning supported logger
+  logger:
+    - _target_: lightning.pytorch.loggers.TensorBoardLogger
+      save_dir: ./logs
+      name: tutorial_log
+      version: null
+      default_hp_metric: false
+
+  # use any Lightning callbacks https://lightning.ai/docs/pytorch/stable/api_references.html#callbacks
+  # and any custom callbakcs that subclass Lightning's Callback parent class
+  callbacks:
+    # Common callbacks used in ML
+
+    # stop training when some criterion is met
+    - _target_: lightning.pytorch.callbacks.EarlyStopping
+      monitor: val0_epoch/weighted_sum        # validation metric to monitor
+      min_delta: 1e-3                         # how much to be considered a "change"
+      patience: 20                            # how many instances of "no change" before stopping
+
+    # checkpoint based on some criterion
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      monitor: val0_epoch/weighted_sum        # validation metric to monitor
+      dirpath: ./results    
+      filename: best                          # best.ckpt is the checkpoint name
+      save_last: true                         # last.ckpt will be saved
+      
+    # log learning rate, e.g. to monitor what the learning rate scheduler is doing
+    - _target_: lightning.pytorch.callbacks.LearningRateMonitor
+      logging_interval: epoch
+
+# training_module refers to a NequIPLightningModule
+training_module:
+  _target_: nequip.train.EMALightningModule
+
+  # We are using an EMA model (i.e. we keep a separate model whose weights are an exponential moving average of the base model's weights)
+  # The use of an EMA model is configured by setting `ema_decay` to be a float (e.g. 0.999) under `training_module` (it is a `NequIPLightningModule` argument). The default of `ema_decay` is None, which means an EMA model is not used, if `ema_decay` is not explicitly configured
+  # EMA allows for smoother validation curves and thus more reliable metrics for monitoring
+  # Loading from a checkpoint for use in the `nequip.ase.NequIPCalculator` or during `nequip-compile` and `nequip-package` will always load the EMA model if it's present
+  ema_decay: 0.999
+
+  # here, we use a simplified MetricsManager wrapper (see docs) to construct the energy-force loss function
+  # the more general `nequip.train.MetricsManager` could also be used to configure a custom loss function
+  loss:
+    _target_: nequip.train.EnergyForceLoss
+    per_atom_energy: true
+    coeffs:
+      total_energy: 0.05
+      forces: 0.95
+
+  # again, we use a simplified MetricsManager wrapper (see docs) to construct the energy-force metrics
+  # the more general `nequip.train.MetricsManager` could also be used in this case
+  # validation metrics are used for monitoring and influencing training, e.g. with LR schedulers or early stopping, etc
+  val_metrics:
+    _target_: nequip.train.EnergyForceMetrics
+    coeffs:
+      total_energy_mae: 1.0
+      forces_mae: 1.0
+      # keys `total_energy_rmse` and `forces_rmse`, `per_atom_energy_rmse` and `per_atom_energy_mae` are also available
+
+  # we could have train_metrics and test_metrics be different from val_metrics, but it makes sense to have them be the same
+  train_metrics: ${training_module.val_metrics}  # use variable interpolation
+  test_metrics: ${training_module.val_metrics}  # use variable interpolation
+
+  # any torch compatible optimizer: https://pytorch.org/docs/stable/optim.html#algorithms
+  optimizer:
+    _target_: torch.optim.Adam
+    lr: 0.03
+
+  # see options for lr_scheduler_config
+  # https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
+  lr_scheduler:
+    # any torch compatible lr sceduler
+    scheduler:
+      _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+      factor: 0.6
+      patience: 5
+      threshold: 0.2
+      min_lr: 1e-6
+    monitor: val0_epoch/weighted_sum
+    interval: epoch
+    frequency: 1
+
+  # model details
+  model:
+    _target_: nequip.model.NequIPGNNModel
+
+    # == basic model params ==
+    seed: 456
+    model_dtype: float32
+    type_names: ${model_type_names}
+    r_max: ${cutoff_radius}
+
+    # == bessel encoding ==
+    num_bessels: 8                # number of basis functions used in the radial Bessel basis, the default of 8 usually works well
+    bessel_trainable: false       # set true to train the bessel weights (default false)
+    polynomial_cutoff_p: 6        # p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance
+
+    # == convnet layers ==
+    num_layers: 3       # number of interaction blocks, we find 3-5 to work best
+    l_max: 1            # the maximum irrep order (rotation order) for the network's features, l=1 is a good default, l=2 is more accurate but slower
+    parity: true        # whether to include features with odd mirror parity; often turning parity off gives equally good results but faster networks, so do consider this
+    num_features: 32    # the multiplicity of the features, 32 is a good default for accurate network, if you want to be more accurate, go larger, if you want to be faster, go lower
+
+    # == radial network ==
+    radial_mlp_depth: 2         # number of radial layers, usually 1-3 works best, smaller is faster
+    radial_mlp_width: 64        # number of hidden neurons in radial function, smaller is faster
+
+    # dataset statistics used to inform the model's initial parameters for normalization, shifting and rescaling
+    # we use omegaconf's resolvers (https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#resolvers)
+    # to facilitate getting the dataset statistics from the DataStatisticsManager
+    
+    # average number of neighbors for edge sum normalization
+    avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
+    
+    # == per-type per-atom scales and shifts ==
+    per_type_energy_scales: ${training_data_stats:per_type_forces_rms}
+    per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}
+    per_type_energy_scales_trainable: false
+    per_type_energy_shifts_trainable: false
+
+    # == ZBL pair potential ==
+    pair_potential:
+      _target_: nequip.nn.pair_potential.ZBL
+      units: metal     # Ang and kcal/mol, LAMMPS unit names;  allowed values "metal" and "real"
+      chemical_species: ${chemical_symbols}   # must tell ZBL the chemical species of the various model atom types
+
+# global options
+global_options:
+  allow_tf32: false
+```
+---------------------------------
+
+## FILE RECORD: painn.yaml
+**Exact Location:** `MLFF_QD\config_files\training\painn.yaml`
+**Summary:** This file, painn.yaml, is a configuration file for training a Painn model using a deep learning framework, specifying various settings for data handling, model architecture, output, training, logging, and testing.
+
+**Content:**
+```text
+# General settings
+general:
+    seed: 42  # Random seed for reproducibility
+    database_name: 'Database.db'  # Name of the database file
+
+# Data handling settings
+data:
+    dataset_path: 
+    use_last_n: 100  # current testing
+# Model architecture settings
+model:
+    model_type: painn   # Options: nequip_mace_so3tensor_fusion
+    cutoff: 12.
+    n_rbf: 40
+    n_atom_basis: 192
+    n_interactions: 2
+    
+    dropout_rate: null # Default is 0.1 but it will not work when you select only 1 layer
+    n_layers: 1  # Default is 1
+    n_neurons: null # [256, 128, 64, 32] (if null then n_neurons == n_atom_basis)
+    distance_unit: 'Ang'
+    property_unit_dict:
+      energy: 'eV'
+      forces: 'eV/Ang'
+
+# Output settings
+outputs:
+    energy:
+      loss_weight: 0.05
+      metrics: "MAE"
+    forces:
+      loss_weight: 0.95
+      metrics: "MAE"
+
+# Training settings
+training:
+    accelerator: 'gpu'
+    devices: 1
+    precision: 32
+    batch_size: 16
+    num_train: 800
+    num_val: 100
+    num_test: 100
+    max_epochs: 3
+    num_workers: 24
+    pin_memory: true
+    log_every_n_steps: 1
+    optimizer:
+      type: 'AdamW'
+      lr: 0.0001 #changed 0.0001 to 0.001
+    scheduler:
+      type: 'ReduceLROnPlateau'
+      factor: 0.8
+      patience: 30
+      verbose: true
+    early_stopping:      
+      monitor: val_loss
+      patience: 20
+      min_delta: 0.001
+      mode: min
+
+# Logging and checkpoint settings
+logging:
+    folder: './results'
+    log_dir: "lightning_logs"
+    checkpoint_dir: "best_inference_model"
+    monitor: "val_loss"
+
+# Testing settings
+testing:
+    trained_model_path: './results'  # Path to load the trained model
+    csv_file_name: 'actual_vs_predicted_enrgforc.csv'  # Path to save the predictions CSV
+
+# Resume training settings
+resume_training:
+    resume_checkpoint_dir: null # Path to model checkpoint file if required 
+
+# Fine Tuning settings
+fine_tuning:
+    pretrained_checkpoint: # checkpoint file path
+    freeze_embedding: true
+    freeze_interactions_up_to: 2 # add no of layers
+    freeze_all_representation: true
+    lr: 0.00005
+    early_stopping_patience: 10
+    best_model_dir: fine_tuned_best_model  # Subdirectory only
+    checkpoint_dir: fine_tuned_checkpoints  # Subdirectory only
+    log_name: fine_tune_logs  # Subdirectory for TensorBoard logs
+```
+---------------------------------
+
+## FILE RECORD: schnet.yaml
+**Exact Location:** `MLFF_QD\config_files\training\schnet.yaml`
+**Summary:** This file, schnet.yaml, is a configuration file for training a SchNet model using the PyTorch Lightning framework.
+
+**Content:**
+```text
+# General settings
+general:
+    seed: 42  # Random seed for reproducibility
+    database_name: 'Database.db'  # Name of the database file
+
+# Data handling settings
+data:
+    dataset_path: 
+    use_last_n: 100  # current testing
+# Model architecture settings
+model:
+    model_type: schnet   # Options: nequip_mace_so3tensor_fusion
+    cutoff: 12.
+    n_rbf: 40
+    n_atom_basis: 192
+    n_interactions: 2
+    
+    dropout_rate: null # Default is 0.1 but it will not work when you select only 1 layer
+    n_layers: 1  # Default is 1
+    n_neurons: null # [256, 128, 64, 32] (if null then n_neurons == n_atom_basis)
+    distance_unit: 'Ang'
+    property_unit_dict:
+      energy: 'eV'
+      forces: 'eV/Ang'
+
+# Output settings
+outputs:
+    energy:
+      loss_weight: 0.05
+      metrics: "MAE"
+    forces:
+      loss_weight: 0.95
+      metrics: "MAE"
+
+# Training settings
+training:
+    accelerator: 'gpu'
+    devices: 1
+    precision: 32
+    batch_size: 16
+    num_train: 800
+    num_val: 100
+    num_test: 100
+    max_epochs: 3
+    num_workers: 24
+    pin_memory: true
+    log_every_n_steps: 1
+    optimizer:
+      type: 'AdamW'
+      lr: 0.0001 #changed 0.0001 to 0.001
+    scheduler:
+      type: 'ReduceLROnPlateau'
+      factor: 0.8
+      patience: 30
+      verbose: true
+    early_stopping:      
+      monitor: val_loss
+      patience: 20
+      min_delta: 0.001
+      mode: min
+
+# Logging and checkpoint settings
+logging:
+    folder: './results'
+    log_dir: "lightning_logs"
+    checkpoint_dir: "best_inference_model"
+    monitor: "val_loss"
+
+# Testing settings
+testing:
+    trained_model_path: './results'  # Path to load the trained model
+    csv_file_name: 'actual_vs_predicted_enrgforc.csv'  # Path to save the predictions CSV
+
+# Resume training settings
+resume_training:
+    resume_checkpoint_dir: null # Path to model checkpoint file if required 
+
+# Fine Tuning settings
+fine_tuning:
+    pretrained_checkpoint: # checkpoint file path
+    freeze_embedding: true
+    freeze_interactions_up_to: 2 # add no of layers
+    freeze_all_representation: true
+    lr: 0.00005
+    early_stopping_patience: 10
+    best_model_dir: fine_tuned_best_model  # Subdirectory only
+    checkpoint_dir: fine_tuned_checkpoints  # Subdirectory only
+    log_name: fine_tune_logs  # Subdirectory for TensorBoard logs
+```
+---------------------------------
+
+## FILE RECORD: run_training.sh
+**Exact Location:** `MLFF_QD\running_files\run_training.sh`
+**Summary:** This file is a Bash script used to run a machine learning training job on a high-performance computing cluster, utilizing multiple GPUs and managing job-specific directories and environment variables.
+
+**Content:**
+```text
+#!/bin/bash
+
+#SBATCH --job-name=schnet_test
+#SBATCH --time=00:10:00
+#SBATCH -c 32
+#SBATCH --mem=64G
+#SBATCH --gres=gpu:a100:1
+#SBATCH --output=%x-%j.out
+#SBATCH --error=%x-%j.err
+
+# --- Multi-GPU launch notes ----------------------------------------------------
+# For SchNet/PAINN/NequIP/Allegro:
+#   - Multi-GPU works with a single SLURM task; frameworks spawn DDP workers internally.
+#   - Use ONLY:
+#       #SBATCH --gres=gpu:a100:<N>
+#   - (Do NOT set --ntasks-per-node=<N> to avoid duplicate logs.)
+#
+# For MACE:
+#   - Requires one SLURM task per GPU; launcher must set WORLD_SIZE/RANK/LOCAL_RANK.
+#   - Use BOTH:
+#       #SBATCH --gres=gpu:a100:<N>
+#       #SBATCH --ntasks-per-node=<N>
+#   - Expect duplicate INFO lines (one per rank) unless you mute non-rank0 in code.
+# -------------------------------------------------------------------------------
+
+
+###############################################
+# 1. ENVIRONMENT SETUP
+###############################################
+
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate mlff_newx3
+export PYTHONUNBUFFERED=1
+
+CDIR="$(pwd)"
+
+
+###############################################
+# 2. SCRATCH DIRECTORY SETUP
+# Purpose:
+#   - Create job-local scratch for fast I/O
+#   - Ensure safe temp usage for SQLite, HDF5, matplotlib, etc.
+###############################################
+
+# 2.1 Optional default SLURM tmpdir (commented)
+# SCRATCH_DIR=${TMPDIR:-/scratch/${SLURM_JOB_ID:-$$}}
+# mkdir -p "$SCRATCH_DIR"
+
+# 2.2 Safe scratch setup (custom)
+BASE_TMP=${TMPDIR:-/scratch}
+SCRATCH_DIR="$BASE_TMP/job_${SLURM_JOB_ID:-$$}"
+mkdir -p "$SCRATCH_DIR"
+
+# 2.3 Export temp-related environment variables
+export TMPDIR="$SCRATCH_DIR"
+export SQLITE_TMPDIR="$SCRATCH_DIR"
+export HDF5_USE_FILE_LOCKING=FALSE
+export MPLCONFIGDIR="$SCRATCH_DIR/.mpl"
+export SCRATCH_DIR  # IMPORTANT: expose for cli.py
+
+
+###############################################
+# 3. ARGUMENT PARSING
+# Purpose:
+#   - Accept YAML config as first argument
+#   - Abort if file missing
+###############################################
+CONFIG_FILE="${1:-input_new.yaml}"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file '$CONFIG_FILE' does not exist."
+    exit 1
+fi
+echo "Using configuration file: $CONFIG_FILE"
+
+
+###############################################
+# 4. PREPARE INPUT FILES
+# Purpose:
+#   - Copy config and data files into scratch directory
+#   - Ensure working directory is local to node
+###############################################
+CFG_BASENAME="$(basename "$CONFIG_FILE")"
+cp "$CONFIG_FILE" "$SCRATCH_DIR"
+cp *.npz "$SCRATCH_DIR" 2>/dev/null || true
+cp *.xyz "$SCRATCH_DIR" 2>/dev/null || true
+
+cd "$SCRATCH_DIR" || { echo "✘ Failed to cd to $SCRATCH_DIR"; exit 1; }
+mkdir -p results
+
+
+###############################################
+# 5. DATABASE LOGIC
+# Purpose:
+#   - Extract 'database_name' from YAML (if defined)
+#   - Default to 'Database.db' if not found
+###############################################
+DB_NAME="Database.db"
+DB_FROM_YAML=$(grep -E '^[[:space:]]*database_name:' "$CFG_BASENAME" | head -n1 \
+  | sed -E 's/\r$//' \
+  | sed -E 's/^[[:space:]]*database_name:[[:space:]]*//; s/[[:space:]]+#.*$//; s/^[[:space:]]*["'\''"]?//; s/["'\''"]?[[:space:]]*$//')
+if [ -n "$DB_FROM_YAML" ] && [ "$DB_FROM_YAML" != "null" ] && [ "$DB_FROM_YAML" != "~" ]; then
+  DB_NAME="$DB_FROM_YAML"
+  echo "→ Parsed database_name from YAML: $DB_NAME"
+else
+  echo "→ No valid database_name in YAML; using default: $DB_NAME"
+fi
+
+# Force logging folder to local scratch results
+sed -i "s|^\(\s*folder:\s*\).*|\1'./results'|g" "$CFG_BASENAME" 2>/dev/null || true
+echo "→ logging.folder set to './results'"
+echo "→ DB (if created) will be at: $SCRATCH_DIR/results/$DB_NAME"
+
+
+
+###############################################
+# 6. GPU VISIBILITY CHECK (Sanity Info)
+# Purpose:
+#   - Verify GPU allocation before training
+#   - Ensure CUDA_VISIBLE_DEVICES matches SLURM allocation
+###############################################
+echo "SLURM_JOB_ID=$SLURM_JOB_ID"
+echo "SLURM_JOB_GPUS=$SLURM_JOB_GPUS"
+echo "SLURM_GPUS_ON_NODE=$SLURM_GPUS_ON_NODE"
+echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+nvidia-smi 
+
+
+###############################################
+# 7. RUN TRAINING
+# Purpose:
+#   - Execute mlff_qd.training with given config
+#   - Fail-fast if DDP configuration is invalid (handled in Python)
+###############################################
+srun --chdir="$SCRATCH_DIR" python -m mlff_qd.training --config "$CFG_BASENAME" "${@:2}" || echo "Training failed, proceeding with copy"
+
+
+
+###############################################
+# 8. COPY RESULTS BACK
+# Purpose:
+#   - Move standardized outputs, results, and benchmarks
+#     back to original directory ($CDIR)
+###############################################
+
+JOB_OUT="$CDIR/$SLURM_JOB_ID"
+mkdir -p "$JOB_OUT"
+
+# Prefer standardized bundle (copy the directory, not its contents)
+if [ -d "$SCRATCH_DIR/standardized" ]; then
+    cp -r "$SCRATCH_DIR/standardized" "$JOB_OUT/"
+    cp -f "$SCRATCH_DIR/$CFG_BASENAME" "$JOB_OUT/" 2>/dev/null || true
+fi
+
+# Always copy results dirs (DB, logs) for convenience
+[ -d "$SCRATCH_DIR/results" ] && cp -r "$SCRATCH_DIR/results" "$JOB_OUT/"
+
+# Benchmarks if present
+if [ -d "$SCRATCH_DIR/benchmark_results" ]; then
+    cp -r "$SCRATCH_DIR/benchmark_results" "$JOB_OUT/"
+    [ -f "$SCRATCH_DIR/benchmark_summary.csv" ] && cp "$SCRATCH_DIR/benchmark_summary.csv" "$JOB_OUT/"
+fi
+
+###############################################
+# 9. CLEANUP
+# Purpose:
+#   - Safely remove scratch directory after copying results
+#   - Prevent accidental deletion of system paths
+###############################################
+if [[ -n "$SCRATCH_DIR" && -d "$SCRATCH_DIR" && "$SCRATCH_DIR" != "/" && "$SCRATCH_DIR" != "/tmp" ]]; then
+  rm -rf "$SCRATCH_DIR"
+else
+  echo "⚠️  Skip cleanup; unsafe SCRATCH_DIR='$SCRATCH_DIR'"
+fi
+
+```
+---------------------------------
+
+## FILE RECORD: training_inference.sh
+**Exact Location:** `MLFF_QD\running_files\training_inference.sh`
+**Summary:** This script is a Bash shell script used to train and run inference on a machine learning model using SLURM job management and a specified configuration file.
+
+**Content:**
+```text
+#!/bin/bash
+#SBATCH --job-name=train
+#SBATCH --time=1-00:00:00  
+#SBATCH -c 32 
+#SBATCH -p medium  
+#SBATCH --mem=64GB 
+#SBATCH --gres=gpu:a100
+#SBATCH --output=%x-%j.out
+#SBATCH --error=%x-%j.err
+
+# 1) Load your env
+conda deactivate 
+conda activate env-name # make sure that the environment name is the one that was created
+
+# 2) Remember original dir
+CDIR=$(pwd)
+
+# 3) Use SLURM's node-local tmp (guaranteed local disk)
+SCRATCH_DIR=${TMPDIR:-/scratch/$SLURM_JOB_ID}
+mkdir -p "$SCRATCH_DIR"
+
+# 4) Copy code & static data (no .db yet)
+CONFIG_FILE=${1:-input.yaml}
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "Error: config '$CONFIG_FILE' not found"
+  exit 1
+fi
+echo "Using config: $CONFIG_FILE"
+
+cp "$CONFIG_FILE" *.npz *.hdf5 "$SCRATCH_DIR"
+
+# 5) cd into the local node scratch
+cd "$SCRATCH_DIR"
+
+# 6) Prepare results folder on local disk
+mkdir -p results
+
+# 7) Extract your DB name from the YAML
+DB_NAME=$(grep -Po "(?<=database_name:\s').*(?=')" "$CONFIG_FILE")
+if [ -z "$DB_NAME" ]; then
+  echo "Error: couldn't parse database_name"
+  exit 1
+fi
+
+# 8) Patch the YAML so logging.folder → ./results
+sed -i "s|^\(\s*folder:\s*\).*|\1'./results'|g" "$CONFIG_FILE"
+
+echo "→ logging.folder set to './results'"
+echo "→ DB will be created at: $SCRATCH_DIR/results/$DB_NAME"
+
+# 9) Run training & inference in the node-local scratch
+srun --chdir="$SCRATCH_DIR" python -m mlff_qd.training --config "$CONFIG_FILE"
+if [ $? -eq 0 ]; then
+  echo "✔ Training succeeded — running inference"
+  srun --chdir="$SCRATCH_DIR" python -m mlff_qd.training.inference --config "$CONFIG_FILE"
+else
+  echo "✘ Training failed — skipping inference"
+fi
+
+# 10) Copy back all outputs (including results/*.db)
+cp -r ./results *.npz *.pkl *.csv "$CDIR"
+
+# 11) Clean up
+rm -rf "$SCRATCH_DIR"
+
+
+
+
+```
+---------------------------------
+
+
